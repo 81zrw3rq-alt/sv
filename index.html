@@ -960,7 +960,19 @@ async function fetchTwelveData(sym){
   currentCurrency = getCurrencySymbol(sym);
   const interval   = TD_INTERVAL_MAP[currentInterval] || '1min';
   const outputsize = TD_OUTPUTSIZE[currentInterval]   || 390;
-  const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputsize}&apikey=${TD_API_KEY}&dp=4`;
+
+  // Twelve Data exchange mapping — strip suffix, pass exchange param
+  let tdSym = sym;
+  let exchangeParam = '';
+  if(sym.endsWith('.HK'))  { tdSym = sym.replace('.HK','');  exchangeParam = '&exchange=XHKG'; }
+  else if(sym.endsWith('.L'))   { tdSym = sym.replace('.L','');   exchangeParam = '&exchange=LSE'; }
+  else if(sym.endsWith('.PA'))  { tdSym = sym.replace('.PA','');  exchangeParam = '&exchange=XPAR'; }
+  else if(sym.endsWith('.DE'))  { tdSym = sym.replace('.DE','');  exchangeParam = '&exchange=XETR'; }
+  else if(sym.endsWith('.T'))   { tdSym = sym.replace('.T','');   exchangeParam = '&exchange=XTKS'; }
+  else if(sym.endsWith('.AX'))  { tdSym = sym.replace('.AX','');  exchangeParam = '&exchange=XASX'; }
+  else if(sym.endsWith('.TO'))  { tdSym = sym.replace('.TO','');  exchangeParam = '&exchange=XTSE'; }
+
+  const url = `https://api.twelvedata.com/time_series?symbol=${tdSym}&interval=${interval}&outputsize=${outputsize}${exchangeParam}&apikey=${TD_API_KEY}&dp=4`;
 
   try {
     const res  = await fetch(url);
