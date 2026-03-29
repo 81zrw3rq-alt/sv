@@ -225,11 +225,16 @@ body{font-family:'Lato',sans-serif;color:var(--text);display:flex;flex-direction
 
 /* ── CHARTS COLUMN ── */
 #charts{
-  display:grid;
-  grid-template-rows:3.2fr 0.9fr 0.9fr 0.9fr;
+  display:flex;flex-direction:column;
   border-right:1px solid var(--border);
-  min-height:0;overflow:hidden;
+  overflow-y:auto;overflow-x:hidden;
+  min-height:0;
 }
+/* Desktop pane heights — scrollable */
+#pane-main{height:420px;min-height:420px;flex-shrink:0;}
+#pane-vol {height:285px;min-height:285px;flex-shrink:0;}
+#pane-rsi {height:285px;min-height:285px;flex-shrink:0;}
+#pane-macd{height:285px;min-height:285px;flex-shrink:0;}
 .pane{
   position:relative;border-bottom:1px solid var(--border);
   overflow:hidden;background:var(--panel);
@@ -237,23 +242,17 @@ body{font-family:'Lato',sans-serif;color:var(--text);display:flex;flex-direction
 .pane:last-child{border-bottom:none;}
 canvas.cc{display:block;}
 
-/* ── PORTRAIT MOBILE — charts scroll vertically ── */
+/* ── PORTRAIT MOBILE — smaller heights ── */
 @media(max-width:699px){
   #body{
     grid-template-columns:70% 30%;
     overflow:hidden;
   }
-  /* Switch charts to scrollable flex column */
-  #charts{
-    display:flex;flex-direction:column;
-    overflow-y:auto;overflow-x:hidden;
-    height:100%;
-  }
-  #pane-main{height:320px;min-height:320px;flex-shrink:0;}
-  #pane-vol {height:200px;min-height:200px;flex-shrink:0;}
-  #pane-rsi {height:200px;min-height:200px;flex-shrink:0;}
-  #pane-macd{height:200px;min-height:200px;flex-shrink:0;}
-  /* Sidebar scrolls internally */
+  #charts{height:100%;}
+  #pane-main{height:320px;min-height:320px;}
+  #pane-vol {height:220px;min-height:220px;}
+  #pane-rsi {height:220px;min-height:220px;}
+  #pane-macd{height:220px;min-height:220px;}
   #sidebar{overflow-y:auto;height:100%;}
 }
 
@@ -274,9 +273,9 @@ canvas.cc{display:block;}
   }
   /* Landscape heights: shorter than portrait since screen is wider */
   #pane-main{height:280px;min-height:280px;flex-shrink:0;}
-  #pane-vol {height:180px;min-height:180px;flex-shrink:0;}
-  #pane-rsi {height:180px;min-height:180px;flex-shrink:0;}
-  #pane-macd{height:180px;min-height:180px;flex-shrink:0;}
+  #pane-vol {height:190px;min-height:190px;flex-shrink:0;}
+  #pane-rsi {height:190px;min-height:190px;flex-shrink:0;}
+  #pane-macd{height:190px;min-height:190px;flex-shrink:0;}
   /* Sidebar: sticky, full height, scroll internally */
   #sidebar{
     overflow-y:auto;
@@ -937,6 +936,18 @@ function showApiKeyPrompt(){
 const TD_INTERVAL_MAP = {'1m':'1min','5m':'5min','15m':'15min','1h':'1h'};
 const TD_OUTPUTSIZE   = {'1m':390,'5m':390,'15m':200,'1h':365};
 
+// Detect currency symbol from ticker
+function getCurrencySymbol(sym){
+  if(sym.endsWith('.HK'))  return 'HK$';
+  if(sym.endsWith('.L'))   return '£';
+  if(sym.endsWith('.PA') || sym.endsWith('.DE') || sym.endsWith('.MI') || sym.endsWith('.AS')) return '€';
+  if(sym.endsWith('.T'))   return '¥';
+  if(sym.endsWith('.TO') || sym.endsWith('.V')) return 'C$';
+  if(sym.endsWith('.AX'))  return 'A$';
+  return '$'; // default USD
+}
+let currentCurrency = '$';
+
 function showLoading(on){
   const bp = document.getElementById('big-price');
   if(bp && on) bp.textContent = '…';
@@ -946,6 +957,7 @@ function showLoading(on){
 
 async function fetchTwelveData(sym){
   showLoading(true);
+  currentCurrency = getCurrencySymbol(sym);
   const interval   = TD_INTERVAL_MAP[currentInterval] || '1min';
   const outputsize = TD_OUTPUTSIZE[currentInterval]   || 390;
   const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputsize}&apikey=${TD_API_KEY}&dp=4`;
@@ -2171,9 +2183,12 @@ function updateSidebar(idx){
   // Top bar
   const lc=b.c,firstO=BARS[0].o;
   const chg=lc-firstO,pct=(chg/firstO*100).toFixed(2);
-  const bp=document.getElementById('big-price');if(bp)bp.textContent=lc.toFixed(2);
+  const cur=currentCurrency||'$';
+  const dp = cur==='¥'||cur==='HK$' ? 2 : 2; // decimals
+  const bp=document.getElementById('big-price');
+  if(bp) bp.textContent = cur + lc.toFixed(dp);
   const cb=document.getElementById('chg-badge');
-  if(cb){cb.textContent=`${chg>=0?'+':''}${chg.toFixed(2)} (${pct}%)`;cb.className='chg '+(chg>=0?'up':'dn');}
+  if(cb){cb.textContent=`${chg>=0?'+':''}${cur}${Math.abs(chg).toFixed(dp)} (${pct}%)`;cb.className='chg '+(chg>=0?'up':'dn');}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2255,15 +2270,12 @@ window.addEventListener('orientationchange',()=>{
 function init(){
   try {
     resizeAll();
-    // Always start with simulated data for instant render
+    // Always render simulated data immediately — NO auto API fetch on page load
+    // User must press LOAD to fetch real data (saves API credits on refresh)
     generateDataFallback();
     ['main','vol','rsi','macd'].forEach(bindPaneZoom);
     ['main','vol','rsi','macd'].forEach(updateZoomRange);
-    // If API key saved, fetch real data immediately
-    if(TD_API_KEY){
-      fetchTwelveData(currentSymbol);
-    }
-    // Show settings button if no key yet
+    // Show API key button always
     const btn = document.getElementById('api-key-btn');
     if(btn) btn.style.display = 'flex';
   } catch(e) {
